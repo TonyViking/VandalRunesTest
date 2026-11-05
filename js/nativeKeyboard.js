@@ -109,18 +109,39 @@
         };
         window.nativeKeyboardDismiss = dismiss;
 
-        // Pin the UI to the top (grid clear of the keyboard) while focused,
-        // and restore vertical centring when the keyboard goes away. Driven
-        // by the input's real focus/blur so it stays in sync even when the
-        // player hides the keyboard manually. refit() forwards to the game's
-        // own resize so the new offset is applied immediately.
+        // Pin the UI to the top (grid clear of the keyboard) while the native
+        // keyboard is actually visible, and restore vertical centring when it
+        // goes away. We cannot rely on blur alone: tapping the keyboard's own
+        // "hide" button dismisses it WITHOUT blurring the input, so blur never
+        // fires and the UI would stay pinned with the tap square hidden (no
+        // way to summon again). So we measure the visual viewport: when the
+        // keyboard is up it is markedly shorter than the layout viewport.
         function setPinTop(on) {
             if (display.pinTopForKeyboard === on) return;
             display.pinTopForKeyboard = on;
             refit();
         }
+
+        // Decide whether the native keyboard is currently open and sync the
+        // pin. Uses visualViewport when available (reliable across focus
+        // quirks); otherwise falls back to "is our input focused".
+        function syncKeyboardOpen() {
+            if (!wantsKeyboard()) { setPinTop(false); return; }
+            const vv = window.visualViewport;
+            if (vv) {
+                // Keyboard open when the visible viewport is meaningfully
+                // shorter than the full window (threshold avoids toolbar
+                // show/hide false positives).
+                const hidden = window.innerHeight - vv.height;
+                setPinTop(hidden > 120);
+            } else {
+                setPinTop(document.activeElement === input);
+            }
+        }
+
         input.addEventListener("focus", function () {
-            if (wantsKeyboard()) setPinTop(true);
+            // Give the viewport a moment to shrink, then measure.
+            setTimeout(syncKeyboardOpen, 50);
         });
         input.addEventListener("blur", function () {
             setPinTop(false);
@@ -246,8 +267,16 @@
         // not move any element behind the keyboard into view by itself, but
         // it prevents the active guess row from being scaled off-screen.
         if (window.visualViewport) {
-            window.visualViewport.addEventListener("resize", refit);
-            window.visualViewport.addEventListener("scroll", refit);
+            // On viewport change, both re-fit the canvas AND re-check whether
+            // the keyboard is still open. The latter is what lets the tap
+            // square reappear when the keyboard is hidden via its own button
+            // (which does not fire blur).
+            const onViewportChange = function () {
+                syncKeyboardOpen();
+                refit();
+            };
+            window.visualViewport.addEventListener("resize", onViewportChange);
+            window.visualViewport.addEventListener("scroll", onViewportChange);
         }
 
         // If we are already in a typing state at startup (we normally start
