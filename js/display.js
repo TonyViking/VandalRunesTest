@@ -263,6 +263,10 @@ class Display {
         this.uiScale = 1;
         this.uiOffsetX = 0;
         this.uiOffsetY = 0;
+        // When true, _resize() pins the UI to the top instead of centring it
+        // vertically. Toggled by js/nativeKeyboard.js while the native
+        // keyboard is open on a touch input screen.
+        this.pinTopForKeyboard = false;
 
         this.state = "title";
         this.revealMode = "solved";
@@ -382,7 +386,16 @@ class Display {
         this.windowW = Math.floor(BASE_W * scale);
         this.windowH = Math.floor(BASE_H * scale);
         this.uiOffsetX = Math.floor((cw - this.windowW) / 2);
-        this.uiOffsetY = Math.floor((ch - this.windowH) / 2);
+        // Normally the UI is centred vertically. When pinTopForKeyboard is
+        // set (touch input screens with the native keyboard open), pin it to
+        // the top instead so the grid sits as high as possible, clear of the
+        // keyboard. Set by js/nativeKeyboard.js; off everywhere else, so
+        // desktop / non-input screens keep the original centred layout.
+        if (this.pinTopForKeyboard) {
+            this.uiOffsetY = 0;
+        } else {
+            this.uiOffsetY = Math.floor((ch - this.windowH) / 2);
+        }
         this.canvas.width = cw;
         this.canvas.height = ch;
         this.canvas.style.width = cw + "px";
@@ -1752,7 +1765,13 @@ class Display {
             const surf = this._renderTextColoured(this.message, BASE_W - 80, "red", 20);
             if (!surf) return;
             const cx = Math.floor(BASE_W / 2);
-            const cy = BASE_H - 25;
+            // Normally the toast sits at the bottom. When the UI is pinned to
+            // the top for the native keyboard, the bottom is behind the
+            // keyboard, so draw it just above the guess grid instead (top
+            // region, always visible).
+            const cy = this.pinTopForKeyboard
+                ? Math.max(Math.floor(surf.height / 2) + 6, GRID_TOP - 18)
+                : BASE_H - 25;
             // Dark rounded background behind the text
             const padX = 12, padY = 6;
             ctx.fillStyle = "#282828";

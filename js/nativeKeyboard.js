@@ -56,6 +56,14 @@
 
         // --- Summon / dismiss based on game state -----------------------
 
+        // Re-fit the canvas by forwarding to the game's own window "resize"
+        // handler, which recomputes scale and offsets (honouring the
+        // pinTopForKeyboard flag). Defined once here so both setPinTop and
+        // the visualViewport listeners below can use it.
+        function refit() {
+            window.dispatchEvent(new Event("resize"));
+        }
+
         function wantsKeyboard() {
             return TYPING_STATES.has(display.state);
         }
@@ -82,6 +90,23 @@
         function dismiss() {
             if (document.activeElement === input) input.blur();
         }
+
+        // Pin the UI to the top (grid clear of the keyboard) while focused,
+        // and restore vertical centring when the keyboard goes away. Driven
+        // by the input's real focus/blur so it stays in sync even when the
+        // player hides the keyboard manually. refit() forwards to the game's
+        // own resize so the new offset is applied immediately.
+        function setPinTop(on) {
+            if (display.pinTopForKeyboard === on) return;
+            display.pinTopForKeyboard = on;
+            refit();
+        }
+        input.addEventListener("focus", function () {
+            if (wantsKeyboard()) setPinTop(true);
+        });
+        input.addEventListener("blur", function () {
+            setPinTop(false);
+        });
 
         // React to every state change. We wrap display.setState so we don't
         // have to touch the game loop; all transitions flow through here.
@@ -206,9 +231,6 @@
         // not move any element behind the keyboard into view by itself, but
         // it prevents the active guess row from being scaled off-screen.
         if (window.visualViewport) {
-            const refit = function () {
-                window.dispatchEvent(new Event("resize"));
-            };
             window.visualViewport.addEventListener("resize", refit);
             window.visualViewport.addEventListener("scroll", refit);
         }
