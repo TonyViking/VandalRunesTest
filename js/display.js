@@ -23,6 +23,19 @@ const KEY_H = 52;
 const KEY_GAP = 6;
 const BOTTOM_KEY_W = 34;
 
+// Native-keyboard "TAP TO TYPE" square + "show keys" fallback link.
+// Occupies the drawn-keyboard area (which spans 3 rows from KEYBOARD_TOP).
+const TAP_SQUARE_W = 10 * KEY_W;                // matches top keyboard row width
+const TAP_SQUARE_H = 100;
+const TAP_SQUARE_X = Math.floor((BASE_W - TAP_SQUARE_W) / 2);
+const TAP_SQUARE_Y = KEYBOARD_TOP + 6;
+const SHOW_KEYS_W = 160;
+const SHOW_KEYS_H = 30;
+const SHOW_KEYS_X = Math.floor((BASE_W - SHOW_KEYS_W) / 2);
+const SHOW_KEYS_Y = TAP_SQUARE_Y + TAP_SQUARE_H + 14;
+const TAP_SQUARE_RECT = { x: TAP_SQUARE_X, y: TAP_SQUARE_Y, w: TAP_SQUARE_W, h: TAP_SQUARE_H };
+const SHOW_KEYS_RECT = { x: SHOW_KEYS_X, y: SHOW_KEYS_Y, w: SHOW_KEYS_W, h: SHOW_KEYS_H };
+
 // Hard mode button
 const HARD_BTN_X = BASE_W - 135 - 8;
 const HARD_BTN_Y = 8;
@@ -69,6 +82,15 @@ const CODE_NUM_KEY_GAP = 4;
 const CODE_NUM_ROW_TOP = KEYBOARD_TOP - CODE_NUM_KEY_H - CODE_NUM_KEY_GAP;
 const CODE_BACK_KEY_W = 63;
 const CODE_ENTRY_MAX = 11;
+// Native-keyboard tap square for the code screen: covers the number/letter
+// pad area (from CODE_NUM_ROW_TOP down through the QWERTY rows), leaving the
+// entry field, PASTE, MENU and COPY buttons above it untouched.
+const CODE_TAP_SQUARE_X = TAP_SQUARE_X;
+const CODE_TAP_SQUARE_Y = CODE_NUM_ROW_TOP;
+const CODE_TAP_SQUARE_W = TAP_SQUARE_W;
+const CODE_TAP_SQUARE_H = (KEYBOARD_TOP + 3 * (KEY_H + KEY_GAP)) - CODE_NUM_ROW_TOP - 10;
+const CODE_TAP_SQUARE_RECT = { x: CODE_TAP_SQUARE_X, y: CODE_TAP_SQUARE_Y, w: CODE_TAP_SQUARE_W, h: CODE_TAP_SQUARE_H };
+const CODE_SHOW_KEYS_RECT = { x: SHOW_KEYS_X, y: CODE_TAP_SQUARE_Y + CODE_TAP_SQUARE_H + 8, w: SHOW_KEYS_W, h: SHOW_KEYS_H };
 // 11-character code shown in 4-4-3 chunks separated by dashes (13.13).
 // RUN OF THE <SEED WORD> line, very top of the code screen (13.8, 13.13):
 // teal sprite letters, above the CURRENT SAVE label.
@@ -267,6 +289,12 @@ class Display {
         // vertically. Toggled by js/nativeKeyboard.js while the native
         // keyboard is open on a touch input screen.
         this.pinTopForKeyboard = false;
+        // Touch devices use the OS native keyboard: the drawn keyboard is
+        // replaced by a "TAP TO TYPE" square (js/nativeKeyboard.js sets this).
+        this.useNativeKeyboard = false;
+        // Fallback: if the player taps "show keys", reveal the original drawn
+        // keyboard for the rest of the session even on a touch device.
+        this.forceDrawnKeyboard = false;
 
         this.state = "title";
         this.revealMode = "solved";
@@ -361,6 +389,54 @@ class Display {
                 x += w;
             }
         }
+    }
+
+    // True when the "TAP TO TYPE" square should replace the drawn keyboard
+    // (touch device using the native keyboard, and the player has not asked
+    // to see the drawn keys via the "show keys" fallback link).
+    _showTapSquare() {
+        return this.useNativeKeyboard && !this.forceDrawnKeyboard;
+    }
+
+    // Draw the "TAP TO TYPE" square + small "show keys" fallback link in the
+    // keyboard area. Used on playing and code screens on touch devices.
+    // squareRect/linkRect default to the playing-screen positions; the code
+    // screen passes its own. hoverId distinguishes the two squares' hovers.
+    _drawTapSquare(squareRect = TAP_SQUARE_RECT, linkRect = SHOW_KEYS_RECT, hoverId = "tap-square") {
+        const ctx = this.vctx;
+        const hs = this._hoverExtra(hoverId);
+        const r = squareRect;
+        // Square: dark rounded panel matching the game's other buttons.
+        let x = r.x, y = r.y, w = r.w, h = r.h;
+        if (hs !== 1.0) {
+            const nw = Math.floor(w * hs), nh = Math.floor(h * hs);
+            x = Math.floor(r.x + r.w / 2 - nw / 2);
+            y = Math.floor(r.y + r.h / 2 - nh / 2);
+            w = nw; h = nh;
+        }
+        ctx.fillStyle = "#1e1e28";
+        this._roundRect(ctx, x, y, w, h, 8);
+        ctx.fill();
+        ctx.strokeStyle = "#50506a";
+        ctx.lineWidth = 2;
+        this._roundRect(ctx, x, y, w, h, 8);
+        ctx.stroke();
+        // Label: keyboard glyph + "TAP TO TYPE"
+        ctx.fillStyle = TEXT_BRIGHT;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const cx = Math.floor(r.x + r.w / 2);
+        const cy = Math.floor(r.y + r.h / 2);
+        ctx.font = "28px Arial";
+        ctx.fillText("\u2328", cx, cy - 14);   // ⌨ keyboard glyph
+        ctx.font = "bold 20px Arial";
+        ctx.fillText("TAP TO TYPE", cx, cy + 18);
+        // Fallback link: "show keys"
+        ctx.fillStyle = TEXT_DIM;
+        ctx.font = "15px Arial";
+        ctx.textBaseline = "middle";
+        ctx.fillText("show keys", Math.floor(linkRect.x + linkRect.w / 2),
+            Math.floor(linkRect.y + linkRect.h / 2));
     }
 
     _setupCanvas() {
@@ -1344,7 +1420,8 @@ class Display {
         this._drawMenuButton(game);
         this._drawHint(game);
         this._drawGrid(game, inputBuffer);
-        this._drawKeyboard(game);
+        if (this._showTapSquare()) this._drawTapSquare();
+        else this._drawKeyboard(game);
         this._drawParticles();
         this._drawMessage();
     }
@@ -2106,6 +2183,10 @@ class Display {
                 this.hoveredButton = "hard";
             else if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y, w: MENU_BTN_W, h: MENU_BTN_H }))
                 this.hoveredButton = "menu";
+            else if (this._showTapSquare()) {
+                if (this._pointInRect(mx, my, TAP_SQUARE_RECT)) this.hoveredButton = "tap-square";
+                else if (this._pointInRect(mx, my, SHOW_KEYS_RECT)) this.hoveredButton = "show-keys";
+            }
             else {
                 for (const [label, rect] of this.keyRects) {
                     if (this._pointInRect(mx, my, rect)) {
@@ -2123,6 +2204,9 @@ class Display {
                 this.hoveredButton = "code-copy";
             } else if (this._pointInRect(mx, my, CODE_PASTE_RECT)) {
                 this.hoveredButton = "code-paste";
+            } else if (this._showTapSquare()) {
+                if (this._pointInRect(mx, my, CODE_TAP_SQUARE_RECT)) this.hoveredButton = "code-tap-square";
+                else if (this._pointInRect(mx, my, CODE_SHOW_KEYS_RECT)) this.hoveredButton = "code-show-keys";
             } else {
                 for (const [label, rect] of this.codeKeyRects) {
                     if (this._pointInRect(mx, my, rect)) {
@@ -2238,6 +2322,17 @@ class Display {
                     this._setClickDown("code-paste");
                     return "code_paste";
                 }
+                if (this._showTapSquare()) {
+                    if (this._pointInRect(mx, my, CODE_TAP_SQUARE_RECT)) {
+                        this._setClickDown("code-tap-square");
+                        return "summon_keyboard";
+                    }
+                    if (this._pointInRect(mx, my, CODE_SHOW_KEYS_RECT)) {
+                        this._setClickDown("code-show-keys");
+                        return "show_drawn_keys";
+                    }
+                    return null;  // no invisible drawn keys while square is up
+                }
                 for (const [label, rect] of this.codeKeyRects) {
                     if (this._pointInRect(mx, my, rect)) {
                         this._setClickDown(label);
@@ -2257,6 +2352,17 @@ class Display {
                 if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y, w: MENU_BTN_W, h: MENU_BTN_H })) {
                     this._setClickDown("menu");
                     return "menu";
+                }
+                if (this._showTapSquare()) {
+                    if (this._pointInRect(mx, my, TAP_SQUARE_RECT)) {
+                        this._setClickDown("tap-square");
+                        return "summon_keyboard";
+                    }
+                    if (this._pointInRect(mx, my, SHOW_KEYS_RECT)) {
+                        this._setClickDown("show-keys");
+                        return "show_drawn_keys";
+                    }
+                    return null;  // no invisible drawn keys while square is up
                 }
                 for (const [label, rect] of this.keyRects) {
                     if (this._pointInRect(mx, my, rect)) {
@@ -3077,7 +3183,11 @@ class Display {
         }
 
         // Keyboard
-        this._drawCodeKeyboard();
+        if (this._showTapSquare()) {
+            this._drawTapSquare(CODE_TAP_SQUARE_RECT, CODE_SHOW_KEYS_RECT, "code-tap-square");
+        } else {
+            this._drawCodeKeyboard();
+        }
     }
 
     _renderLabel(text, cx, cy, colour) {

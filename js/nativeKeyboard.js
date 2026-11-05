@@ -54,6 +54,10 @@
             return;
         }
 
+        // Commit to the native keyboard: the drawn keyboard is replaced by a
+        // "TAP TO TYPE" square (see display._showTapSquare / _drawTapSquare).
+        display.useNativeKeyboard = true;
+
         // --- Summon / dismiss based on game state -----------------------
 
         // Re-fit the canvas by forwarding to the game's own window "resize"
@@ -81,6 +85,9 @@
         }
 
         function summon() {
+            // If the player chose the drawn-keyboard fallback, don't force
+            // the native one open.
+            if (display.forceDrawnKeyboard) return;
             configureFor(display.state);
             // focus() inside a user gesture is what makes the OS keyboard open.
             try { input.focus({ preventScroll: true }); }
@@ -90,6 +97,17 @@
         function dismiss() {
             if (document.activeElement === input) input.blur();
         }
+
+        // Let main.js drive the keyboard from the on-canvas tap square.
+        // Focusing from the square re-enables the native keyboard even if the
+        // player had previously tapped "show keys".
+        window.nativeKeyboardFocus = function () {
+            display.forceDrawnKeyboard = false;
+            configureFor(display.state);
+            try { input.focus({ preventScroll: true }); }
+            catch (e) { input.focus(); }
+        };
+        window.nativeKeyboardDismiss = dismiss;
 
         // Pin the UI to the top (grid clear of the keyboard) while focused,
         // and restore vertical centring when the keyboard goes away. Driven
@@ -129,13 +147,10 @@
                 (TYPING_STATES.has(newState) ? " (keyboard summoned)" : " (keyboard dismissed)"));
         };
 
-        // Tapping the canvas while in a typing state re-summons the keyboard
-        // if the player dismissed it (phones let the user hide it manually).
-        display.canvas.addEventListener("touchend", function () {
-            if (wantsKeyboard() && document.activeElement !== input) {
-                summon();
-            }
-        });
+        // (Re-summoning is handled by the on-canvas "TAP TO TYPE" square,
+        // which routes a "summon_keyboard" action through main.js. We no
+        // longer blanket-resummon on every canvas tap, so taps on the
+        // "show keys" link aren't immediately overridden.)
 
         // --- Feed keystrokes into the existing action pipeline ----------
 

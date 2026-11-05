@@ -128,6 +128,16 @@ function gameLoop() {
         return;
     }
 
+    // Tap-square actions (touch devices, playing/code screens). The square
+    // replaces the drawn keyboard; tapping it opens the OS native keyboard,
+    // and the "show keys" link falls back to the drawn keyboard.
+    if (act === "summon_keyboard") {
+        if (window.nativeKeyboardFocus) window.nativeKeyboardFocus();
+    } else if (act === "show_drawn_keys") {
+        display.forceDrawnKeyboard = true;
+        if (window.nativeKeyboardDismiss) window.nativeKeyboardDismiss();
+    }
+
     // --- Title screen ---
     if (display.state === "title") {
         if (act === "start") {
