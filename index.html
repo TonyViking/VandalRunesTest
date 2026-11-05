@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vandal Runes</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+    </div>
+    <div id="loading">Loading Vandal Runes...</div>
+    <!--
+      Hidden input used only on touch devices to summon the OS native
+      keyboard (see js/nativeKeyboard.js). It must stay focusable, so it is
+      made invisible with opacity/position rather than display:none. It never
+      occupies layout and cannot push game elements out of view.
+    -->
+    <input id="native-input" type="text"
+           autocomplete="off" autocorrect="off" autocapitalize="characters"
+           spellcheck="false" inputmode="text"
+           aria-hidden="true" tabindex="-1" />
+    <script src="js/game.js"></script>
+    <script src="js/assets.js"></script>
+    <script src="js/display.js"></script>
+    <script src="js/nativeKeyboard.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #121213;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+
+#game-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#game-canvas {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    background: #121213;
+    touch-action: none;
+}
+
+#loading {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #d7d7d7;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+}
+
+/*
+ * Hidden native-keyboard input (touch devices only). Kept focusable so it
+ * can summon the OS keyboard, but visually gone and removed from layout so
+ * it never covers or shifts any game element. Not display:none — that would
+ * make it impossible to focus.
+ */
+#native-input {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    color: transparent;
+    caret-color: transparent;
+    pointer-events: none;
+    z-index: -1;
+}
