@@ -100,47 +100,50 @@
 
         // Let main.js drive the keyboard from the on-canvas tap square.
         // Focusing from the square re-enables the native keyboard even if the
-        // player had previously tapped "show keys".
+        // player had previously tapped "show keys". We blur-then-focus so a
+        // fresh focus event fires even when the input is already focused
+        // (Firefox treats focus() on an already-focused input as a no-op and
+        // won't reopen the keyboard after the OS hide button was used).
         window.nativeKeyboardFocus = function () {
             display.forceDrawnKeyboard = false;
             configureFor(display.state);
+            try { input.blur(); } catch (e) {}
             try { input.focus({ preventScroll: true }); }
             catch (e) { input.focus(); }
         };
         window.nativeKeyboardDismiss = dismiss;
 
         // Pin the UI to the top (grid clear of the keyboard) while the native
-        // keyboard is actually visible, and restore vertical centring when it
-        // goes away. We cannot rely on blur alone: tapping the keyboard's own
-        // "hide" button dismisses it WITHOUT blurring the input, so blur never
-        // fires and the UI would stay pinned with the tap square hidden (no
-        // way to summon again). So we measure the visual viewport: when the
-        // keyboard is up it is markedly shorter than the layout viewport.
+        // keyboard is open, and restore vertical centring when it goes away.
+        // Focus drives the pin directly (some browsers, e.g. Aloha, overlay the
+        // keyboard without shrinking visualViewport, so a viewport-height
+        // measurement alone would miss it). visualViewport is kept only to
+        // CLEAR the pin when the keyboard is dismissed without blur (the OS
+        // hide button doesn't fire blur, so we detect the viewport growing
+        // back and un-pin to reveal the tap square again).
         function setPinTop(on) {
             if (display.pinTopForKeyboard === on) return;
             display.pinTopForKeyboard = on;
             refit();
         }
 
-        // Decide whether the native keyboard is currently open and sync the
-        // pin. Uses visualViewport when available (reliable across focus
-        // quirks); otherwise falls back to "is our input focused".
+        // Clear the pin when the keyboard is dismissed without blur: the
+        // visible viewport grows back close to the full window height.
         function syncKeyboardOpen() {
             if (!wantsKeyboard()) { setPinTop(false); return; }
+            if (!display.pinTopForKeyboard) return;  // already unpinned
             const vv = window.visualViewport;
-            if (vv) {
-                // Keyboard open when the visible viewport is meaningfully
-                // shorter than the full window (threshold avoids toolbar
-                // show/hide false positives).
-                const hidden = window.innerHeight - vv.height;
-                setPinTop(hidden > 120);
-            } else {
-                setPinTop(document.activeElement === input);
-            }
+            if (!vv) return;  // nothing to measure; focus/blur owns the pin
+            const hidden = window.innerHeight - vv.height;
+            if (hidden <= 120) setPinTop(false);
         }
 
         input.addEventListener("focus", function () {
-            // Give the viewport a moment to shrink, then measure.
+            // Focus => keyboard open. Pin immediately (covers overlay
+            // browsers that don't shrink visualViewport).
+            if (wantsKeyboard()) setPinTop(true);
+            // Belt-and-braces: if the viewport does shrink, re-measure so the
+            // pin matches reality (and later hide-button dismissal is caught).
             setTimeout(syncKeyboardOpen, 50);
         });
         input.addEventListener("blur", function () {
