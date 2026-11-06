@@ -142,9 +142,11 @@
             // Focus => keyboard open. Pin immediately (covers overlay
             // browsers that don't shrink visualViewport).
             if (wantsKeyboard()) setPinTop(true);
-            // Belt-and-braces: if the viewport does shrink, re-measure so the
-            // pin matches reality (and later hide-button dismissal is caught).
-            setTimeout(syncKeyboardOpen, 50);
+            // visualViewport resize (wired below) handles unpinning when the
+            // keyboard is dismissed. Do NOT re-measure here: syncKeyboardOpen
+            // unpins when the viewport is tall, and the keyboard often hasn't
+            // had time to shrink it 50ms after focus, which would undo the
+            // pin we just set.
         });
         input.addEventListener("blur", function () {
             setPinTop(false);

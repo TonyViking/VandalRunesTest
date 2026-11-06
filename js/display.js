@@ -296,6 +296,11 @@ class Display {
         // keyboard for the rest of the session even on a touch device.
         this.forceDrawnKeyboard = false;
 
+        // On touch devices the native keyboard covers the bottom; lift the
+        // guess grid + Main Menu button up by ~half a tile so they stay
+        // clear of it even when the viewport doesn't pin to the top.
+        // _gridLift() returns 0 on desktop so the layout is unchanged there.
+
         this.state = "title";
         this.revealMode = "solved";
         this.stampEffect = null;
@@ -406,6 +411,12 @@ class Display {
     // hide it.
     _tapSquareVisible() {
         return this._showTapSquare() && !this.pinTopForKeyboard;
+    }
+
+    // Vertical lift applied on touch devices so the guess grid + Main Menu
+    // button clear the native keyboard. ~half a tile. 0 on desktop.
+    _gridLift() {
+        return this.useNativeKeyboard ? Math.round(TILE_SIZE / 2) : 0;
     }
 
     // Draw the "TAP TO TYPE" square + small "show keys" fallback link in the
@@ -1565,8 +1576,11 @@ class Display {
         const ctx = this.vctx;
         const btn = this.assets.getButton("Main_Menu");
         const hs = this._hoverExtra("menu");
+        // Lift with the grid on touch devices so the menu button clears the
+        // native keyboard. 0 on desktop (lift == 0).
+        const menuY = MENU_BTN_Y - this._gridLift();
         if (btn) {
-            const [scaled, rect] = this._scaleToFit(btn, { x: MENU_BTN_X, y: MENU_BTN_Y, w: MENU_BTN_W, h: MENU_BTN_H });
+            const [scaled, rect] = this._scaleToFit(btn, { x: MENU_BTN_X, y: menuY, w: MENU_BTN_W, h: MENU_BTN_H });
             if (scaled) {
                 if (hs !== 1.0) {
                     const sw = Math.floor(scaled.width * hs);
@@ -1575,25 +1589,25 @@ class Display {
                     tmp.width = sw; tmp.height = sh;
                     tmp.getContext("2d").drawImage(scaled, 0, 0, sw, sh);
                     ctx.drawImage(tmp, Math.floor(MENU_BTN_X + MENU_BTN_W / 2 - sw / 2),
-                        Math.floor(MENU_BTN_Y + MENU_BTN_H / 2 - sh / 2), sw, sh);
+                        Math.floor(menuY + MENU_BTN_H / 2 - sh / 2), sw, sh);
                 } else {
                     ctx.drawImage(scaled, rect.x, rect.y);
                 }
             }
         } else {
             ctx.fillStyle = "#3c3c3c";
-            this._roundRect(ctx, MENU_BTN_X, MENU_BTN_Y, MENU_BTN_W, MENU_BTN_H, 4);
+            this._roundRect(ctx, MENU_BTN_X, menuY, MENU_BTN_W, MENU_BTN_H, 4);
             ctx.fill();
             ctx.strokeStyle = WHITE;
             ctx.lineWidth = 1;
-            this._roundRect(ctx, MENU_BTN_X, MENU_BTN_Y, MENU_BTN_W, MENU_BTN_H, 4);
+            this._roundRect(ctx, MENU_BTN_X, menuY, MENU_BTN_W, MENU_BTN_H, 4);
             ctx.stroke();
             ctx.fillStyle = WHITE;
             ctx.font = "14px Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText("MENU", Math.floor(MENU_BTN_X + MENU_BTN_W / 2),
-                Math.floor(MENU_BTN_Y + MENU_BTN_H / 2));
+                Math.floor(menuY + MENU_BTN_H / 2));
         }
     }
 
@@ -1618,10 +1632,11 @@ class Display {
         const history = game.getGuessHistory();
         const guessCount = game.getGuessCount();
         const flashing = this._isFlashing();
+        const lift = this._gridLift();
         for (let row = 0; row < 6; row++) {
             for (let col = 0; col < 5; col++) {
                 const x = GRID_LEFT + col * (TILE_SIZE + TILE_GAP);
-                const y = GRID_TOP + row * (TILE_SIZE + TILE_GAP);
+                const y = GRID_TOP - lift + row * (TILE_SIZE + TILE_GAP);
                 if (row < guessCount) {
                     const { word, colours } = history[row];
                     const letter = word[col];
@@ -1860,7 +1875,7 @@ class Display {
             // keyboard, so draw it just above the guess grid instead (top
             // region, always visible).
             const cy = this.pinTopForKeyboard
-                ? Math.max(Math.floor(surf.height / 2) + 6, GRID_TOP - 18)
+                ? Math.max(Math.floor(surf.height / 2) + 6, GRID_TOP - this._gridLift() - 18)
                 : BASE_H - 25;
             // Dark rounded background behind the text
             const padX = 12, padY = 6;
@@ -2194,7 +2209,7 @@ class Display {
         } else if (this.state === "playing") {
             if (this._pointInRect(mx, my, { x: HARD_BTN_X, y: HARD_BTN_Y, w: HARD_BTN_W, h: HARD_BTN_H }))
                 this.hoveredButton = "hard";
-            else if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y, w: MENU_BTN_W, h: MENU_BTN_H }))
+            else if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y - this._gridLift(), w: MENU_BTN_W, h: MENU_BTN_H }))
                 this.hoveredButton = "menu";
             else if (this._showTapSquare()) {
                 if (this._tapSquareVisible()) {
@@ -2368,7 +2383,7 @@ class Display {
                     this._setClickDown("hard");
                     return "toggle_hard";
                 }
-                if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y, w: MENU_BTN_W, h: MENU_BTN_H })) {
+                if (this._pointInRect(mx, my, { x: MENU_BTN_X, y: MENU_BTN_Y - this._gridLift(), w: MENU_BTN_W, h: MENU_BTN_H })) {
                     this._setClickDown("menu");
                     return "menu";
                 }
