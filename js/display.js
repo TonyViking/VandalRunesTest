@@ -82,6 +82,34 @@ const CODE_NUM_KEY_GAP = 4;
 const CODE_NUM_ROW_TOP = KEYBOARD_TOP - CODE_NUM_KEY_H - CODE_NUM_KEY_GAP;
 const CODE_BACK_KEY_W = 63;
 const CODE_ENTRY_MAX = 11;
+// Code-entry tile layout: 11 chars as 4-4-3 tiles with fixed dashes
+// between groups, mirroring the guess-grid tile style. Sized to fit within
+// the old entry-field width (BASE_W - 120).
+const CODE_TILE_SIZE = 34;
+const CODE_TILE_GAP = 4;
+const CODE_DASH_W = 18;            // space reserved for each group dash
+const CODE_ENTRY_TILE_Y = CODE_ENTRY_Y;   // vertical centre of the tile row
+// Total width: 11 tiles + 10 tile-gaps + 2 dash slots (each replaces one
+// tile-gap, so add CODE_DASH_W - CODE_TILE_GAP twice).
+const CODE_ENTRY_TOTAL_W = (11 * CODE_TILE_SIZE) + (10 * CODE_TILE_GAP)
+    + 2 * (CODE_DASH_W - CODE_TILE_GAP);
+const CODE_ENTRY_LEFT = Math.floor((BASE_W - CODE_ENTRY_TOTAL_W) / 2);
+// Per-tile x positions (left edge of each tile) and dash centres.
+const CODE_TILE_XS = [];
+{
+    // The dashes sit between tiles 3->4 and 7->8 (0-based).
+    let _x = CODE_ENTRY_LEFT;
+    for (let i = 0; i < 11; i++) {
+        CODE_TILE_XS.push(_x);
+        _x += CODE_TILE_SIZE + CODE_TILE_GAP;
+        if (i === 3 || i === 7) _x += (CODE_DASH_W - CODE_TILE_GAP);
+    }
+}
+// Dash centres, used to draw the "-" separators between groups.
+const CODE_DASH_CENTRES = [
+    CODE_ENTRY_LEFT + 4 * CODE_TILE_SIZE + 3 * CODE_TILE_GAP + CODE_DASH_W / 2,
+    CODE_ENTRY_LEFT + 8 * CODE_TILE_SIZE + 7 * CODE_TILE_GAP + 2 * (CODE_DASH_W - CODE_TILE_GAP) + CODE_DASH_W / 2,
+];
 // Native-keyboard tap square for the code screen: covers the number/letter
 // pad area (from CODE_NUM_ROW_TOP down through the QWERTY rows), leaving the
 // entry field, PASTE, MENU and COPY buttons above it untouched.
@@ -3126,6 +3154,83 @@ class Display {
         }
     }
 
+    // Draw the code-entry field as 4-4-3 tiles with fixed dashes between
+    // groups, mirroring the guess-grid tile style. Filled tiles show their
+    // character (sprite, falling back to Arial); empty tiles show as empty
+    // bordered boxes. The current input position gets a highlighted border.
+    _drawCodeEntryTiles() {
+        const ctx = this.vctx;
+        const buf = this.codeEntryBuffer || "";
+        const tileY = CODE_ENTRY_TILE_Y - Math.floor(CODE_TILE_SIZE / 2);
+        const flashing = this._isFlashing();
+
+        // Dashes between groups (fixed, drawn from the layout constants).
+        ctx.fillStyle = TEXT_DIM;
+        ctx.font = `bold ${CODE_TILE_SIZE}px Arial`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        for (const dx of CODE_DASH_CENTRES) {
+            ctx.fillText("-", Math.floor(dx), CODE_ENTRY_TILE_Y);
+        }
+
+        for (let i = 0; i < CODE_ENTRY_MAX; i++) {
+            const x = CODE_TILE_XS[i];
+            const ch = i < buf.length ? buf[i] : "";
+            const isCurrent = i === buf.length;  // cursor position
+
+            // Tile background + border (matches guess-grid empty/filled style).
+            if (ch) {
+                ctx.fillStyle = "#1e1e28";
+                this._roundRect(ctx, x, tileY, CODE_TILE_SIZE, CODE_TILE_SIZE, 4);
+                ctx.fill();
+                ctx.strokeStyle = flashing && isCurrent ? FLASH_COLOUR : "#50506a";
+            } else {
+                ctx.fillStyle = "#1e1e28";
+                this._roundRect(ctx, x, tileY, CODE_TILE_SIZE, CODE_TILE_SIZE, 4);
+                ctx.fill();
+                ctx.strokeStyle = isCurrent ? "#8a8a9a" : EMPTY_BORDER;
+            }
+            ctx.lineWidth = 2;
+            this._roundRect(ctx, x, tileY, CODE_TILE_SIZE, CODE_TILE_SIZE, 4);
+            ctx.stroke();
+
+            // Character sprite (or Arial fallback), centred in the tile.
+            if (ch) {
+                this._drawCodeEntryChar(ch, x + CODE_TILE_SIZE / 2, CODE_ENTRY_TILE_Y);
+            }
+        }
+    }
+
+    // Draw a single code-entry character centred at (cx, cy). Uses sprite
+    // glyphs when available (matching the code screen's other text) and
+    // falls back to a styled Arial glyph.
+    _drawCodeEntryChar(ch, cx, cy) {
+        const ctx = this.vctx;
+        const height = Math.floor(CODE_TILE_SIZE * 0.66);
+        let surf = null;
+        if (ch.match(/[A-Z]/) && ch.length === 1) {
+            surf = this.assets.getLetter("gray", ch);
+        } else if (ch.match(/[a-z]/) && ch.length === 1) {
+            surf = this.assets.getCodeLower(ch.toUpperCase());
+        } else if (ch.match(/[0-9]/)) {
+            surf = this.assets.getCodeGlyph(ch);
+        } else if (["?","!","@","#","$","%","^","&","+","*"].includes(ch)) {
+            surf = this.assets.getCodeGlyph(ch);
+        }
+        if (!surf) {
+            ctx.fillStyle = ch.match(/[a-z]/) ? "#649bff" : "#c8c8d2";
+            ctx.font = `bold ${height}px Arial`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(ch, Math.floor(cx), Math.floor(cy));
+        } else {
+            const scale = height / surf.height;
+            const dw = Math.max(1, Math.floor(surf.width * scale));
+            const dh = Math.max(1, Math.floor(surf.height * scale));
+            ctx.drawImage(surf, Math.floor(cx - dw / 2), Math.floor(cy - dh / 2), dw, dh);
+        }
+    }
+
     _drawCode(game) {
         const ctx = this.vctx;
         const bg = this.assets.bgSurfs[0] || null;
@@ -3188,25 +3293,9 @@ class Display {
             this._renderLabel("ENTER NEW CODE TO LOAD", 252, 130 + CODE_SHIFT, "#c8c8d2");
         }
 
-        // Entry field
-        const entryY = CODE_ENTRY_Y;
-        ctx.fillStyle = "#1e1e28";
-        this._roundRect(ctx, 60, entryY - 30, BASE_W - 120, 60, 6);
-        ctx.fill();
-        ctx.strokeStyle = "#50506a";
-        ctx.lineWidth = 2;
-        this._roundRect(ctx, 60, entryY - 30, BASE_W - 120, 60, 6);
-        ctx.stroke();
-        if (this.codeEntryBuffer) {
-            this._drawCodeRow(this._chunkCode(this.codeEntryBuffer),
-                Math.floor(BASE_W / 2), entryY, 36, 4, BASE_W - 130);
-        } else {
-            ctx.fillStyle = TEXT_DIM;
-            ctx.font = "14px Arial";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText("Tap keys below...", Math.floor(BASE_W / 2), entryY);
-        }
+        // Entry field — 4-4-3 tiles with fixed dashes between groups,
+        // mirroring the guess-grid style (see _drawCodeEntryTiles).
+        this._drawCodeEntryTiles();
 
         // Error
         if (this.codeError) {
